@@ -1,0 +1,210 @@
+---
+title: "The Future of Asynchronous Programming in R"
+subtitle: "August 1, 2025"
+author: "Charlie Gao (Open Source - Posit Software, PBC)"
+footer: "See these slides at https://shikokuchuo.net/user2025"
+---
+
+## Email
+
+<br />
+
+### Polling
+
+⏳📩🔄
+
+- Email client checks every [15] mins
+- Previously the norm, even now sometimes the only way
+
+### Push Notifications
+
+📨
+
+- Event-driven, sent as soon as email arrives
+- More modern approach
+
+## mirai
+<https://mirai.r-lib.org/>
+
+<img src="images/mirai.png" width="300px"/>
+
+→ `mirai()` runs R code in the background, without blocking the R session.
+
+```{r}
+#| echo: true
+library(mirai)
+
+m <- mirai({
+  Sys.sleep(1)
+  100 + 42
+})
+```
+
+## mirai - Polling
+
+How to check for a result?
+
+<br />
+
+```{r}
+#| echo: true
+unresolved(m)
+```
+
+## mirai - Polling
+
+How to check for a result?
+
+<br />
+
+```{r}
+#| echo: true
+while (unresolved(m)) {
+  Sys.sleep(0.1)
+  # or do actual work
+}
+m$data
+```
+
+<br />
+
+→ Like checking email every 15 mins.
+
+## mirai - What actually happens
+
+::: column
+
+### C level: mirai object completion callback
+
+<br />
+*background thread*
+
+- Checks error code
+- Stores pointer to binary data
+- Stores completion status
+
+:::
+::: column
+
+### R function: `$data` or `unresolved()`
+
+<br />
+*main thread*
+
+- Checks completion status
+- Checks if binary data is available
+- Unserializes this into an R object
+
+:::
+
+<br />
+→ Much more asynchronous.
+
+→ Efficient by doing as much as possible early.
+
+→ So, not quite like checking for email.
+
+## mirai - Event-driven
+
+<br />
+
+Use `[]` to wait for and collect the result:
+
+<br />
+
+```{r}
+#| echo: true
+m[]
+```
+
+<br />
+
+→ This is efficient, but blocking.
+
+## Async toolkit
+
+### promises
+<https://rstudio.github.io/promises/>
+
+<br />
+
+Higher level - interface for async
+
+`as.promise(x)$then(func)`
+
+<br />
+
+### later
+<https://later.r-lib.org>
+
+<br />
+
+Lower level - implementation for async
+
+`later(func, secs)`
+
+## Polling promises (the old way)
+
+```r
+as.promise.mirai <- function(x) {
+  promises::promise(
+    function(resolve, reject) {
+      check <- function() {
+        if (unresolved(x)) {
+          later::later(check, delay = 0.1)
+        } else {
+          value <- x$data
+          if (is_error_value(value)) reject(value) else resolve(value)
+        }
+      }
+      check()
+    }
+  )
+}
+```
+→ Schedules itself to check every 0.1 secs via *later*.
+
+## Event-driven promises (the new way)
+
+```r
+as.promise.mirai <- function(x) {
+  promises::promise(
+    function(resolve, reject) {
+      if (unresolved(x)) {    
+        .keep(x, environment())
+      } else {
+        value <- x$data
+        if (is_error_value(value)) reject(value) else resolve(value)
+      }
+    }
+  )
+}
+```
+→ No repeating check.
+
+→ `.keep()` is a special function which tells the mirai completion callback to call into later (via its C interface) to resolve the promise.
+
+→ Actions are scheduled as soon as a mirai completes.
+
+## We've upgraded async across the ecosystem
+
+<p><img src="images/shiny.png" width="300px"/>
+<img src="images/plumber2.svg" width="300px"/>
+<img src="images/mirai.png" width="300px"/>
+<img src="images/purrr.png" width="300px"/>
+<img src="images/tidymodels.png" width="300px"/>
+<br />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="images/httr2.png" width="300px"/>
+<img src="images/ellmer.png" width="300px"/>
+<img src="images/shinychat.svg" width="300px"/>
+<img src="images/mcptools.png" width="300px"/>
+</p>
+
+## Thanks
+
+#### The Future of Asynchronous Programming in R
+#### (we now have push notifications)
+
+<p><br /><br /><img src="images/shiny.png" width="300px"/>
+<img src="images/mirai.png" width="300px"/>
+<img src="images/tidyverse.svg" width="300px"/><br /><br /></p>

@@ -1,0 +1,11 @@
+project:
+  title: "useR!2025"
+format:
+  revealjs:
+    theme: [custom.scss]
+    width: "1600"
+    height: "900"
+    code-block-height: 700px
+editor: 
+  markdown: 
+    wrap: 72
